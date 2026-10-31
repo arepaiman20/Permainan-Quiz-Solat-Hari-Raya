@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>Gesture Quiz: Solat Sunat Hari Raya</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+        colors: { jade: { 50:'#effcf6', 100:'#d8f8e8', 500:'#10b981', 600:'#059669', 700:'#047857', 900:'#064e3b' } }
+      }}
+    };
+  </script>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; color: #f8fafc; overflow-x: hidden;
+      background: radial-gradient(circle at 12% 10%, #14532d 0, transparent 34%),
+                  radial-gradient(circle at 88% 18%, #155e75 0, transparent 30%),
+                  linear-gradient(135deg, #071b2b, #102a43 48%, #14213d);
+    }
+    .glass { background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.19); box-shadow: 0 18px 50px rgba(0,0,0,.2); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+    .soft-glow { box-shadow: 0 0 0 1px rgba(255,255,255,.15), 0 10px 35px rgba(16,185,129,.15); }
+    #cameraWrap { position: relative; overflow: hidden; background: #07111f; }
+    #webcam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: .55; }
+    #overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; transform: scaleX(-1); }
+    .answer { transition: transform .18s ease, border-color .18s ease, background .18s ease; min-height: 150px; touch-action: manipulation; }
+    .answer:hover { transform: translateY(-3px); }
+    .answer.selected { border-color: #facc15; background: rgba(250,204,21,.20); box-shadow: 0 0 0 3px rgba(250,204,21,.18), 0 0 30px rgba(250,204,21,.18); }
+    .answer.correct { border-color: #34d399; background: rgba(16,185,129,.25); }
+    .answer.wrong { border-color: #fb7185; background: rgba(244,63,94,.22); }
+    .ring { stroke-dasharray: 100; stroke-dashoffset: 100; transition: stroke-dashoffset .08s linear; transform: rotate(-90deg); transform-origin: 50% 50%; }
+    .hand-cursor { position:absolute; z-index:8; width:28px; height:28px; border:3px solid #fef08a; border-radius:50%; background:rgba(250,204,21,.25); box-shadow:0 0 0 8px rgba(250,204,21,.12),0 0 22px #facc15; pointer-events:none; transform:translate(-50%,-50%); display:none; }
+    .gesture-zones { position:absolute; z-index:5; left:10px; right:10px; bottom:48px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; pointer-events:none; }
+    .gesture-zone { border:1px solid rgba(255,255,255,.35); border-radius:12px; background:rgba(15,23,42,.62); text-align:center; padding:9px 3px; font-size:11px; font-weight:800; color:#f8fafc; backdrop-filter:blur(8px); }
+    .gesture-zone.active { border-color:#fde047; background:rgba(250,204,21,.3); color:#fef08a; }
+    .shake { animation: shake .32s ease-in-out; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 50%{transform:translateX(5px)} 75%{transform:translateX(-3px)} }
+    .confetti { position:fixed; top:-12px; width:9px; height:14px; z-index:90; pointer-events:none; animation:fall 1.8s linear forwards; }
+    @keyframes fall { to { transform:translate3d(var(--drift),110vh,0) rotate(760deg); opacity:.2; } }
+    .modal-backdrop { background:rgba(2,6,23,.76); backdrop-filter:blur(10px); }
+    .choice-letter { display:inline-grid; place-items:center; width:34px;height:34px;border-radius:12px;background:rgba(255,255,255,.15);font-weight:900; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline:3px solid #fde047; outline-offset:3px; }
+    @media(max-width:640px) { .answer{min-height:130px} #cameraWrap{min-height:190px} }
+  </style>
+</head>
+<body class="font-sans">
+  <div class="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+    <div class="absolute -top-20 -left-20 w-72 h-72 rounded-full bg-emerald-400/10 blur-3xl"></div>
+    <div class="absolute bottom-0 -right-20 w-96 h-96 rounded-full bg-cyan-400/10 blur-3xl"></div>
+  </div>
+
+  <main id="app" class="relative max-w-7xl mx-auto px-4 py-4 sm:px-6 sm:py-6">
+    <header class="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-300 to-cyan-400 text-slate-900 grid place-items-center text-2xl shadow-lg">☪</div>
+        <div>
+          <p class="text-xs uppercase tracking-[.25em] text-emerald-200 font-bold">BBM Digital • Pendidikan Islam</p>
+          <h1 class="text-xl sm:text-2xl font-black tracking-tight">Gesture Quiz <span class="text-emerald-300">Hari Raya</span></h1>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="musicBtn" type="button" aria-pressed="true" class="glass rounded-xl px-4 py-2.5 text-sm font-bold hover:bg-white/20">🎵 Muzik: ON</button>
+        <label class="glass rounded-xl px-3 py-2.5 flex items-center gap-2 text-xs font-semibold" title="Laraskan kelantangan muzik">
+          🔊 <input id="musicVolume" type="range" min="0" max="100" value="35" class="w-20 accent-emerald-400" aria-label="Kelantangan muzik">
+        </label>
+        <button id="bankBtn" class="glass rounded-xl px-4 py-2.5 text-sm font-bold hover:bg-white/20">📚 Bank Soalan</button>
+        <button id="cameraBtn" class="rounded-xl px-4 py-2.5 text-sm font-bold bg-emerald-400 text-slate-950 hover:bg-emerald-300">📷 Aktifkan Kamera</button>
+      </div>
+    </header>
+
+    <section class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4" aria-label="Paparan status permainan">
+      <div class="glass rounded-2xl p-3 sm:p-4"><p class="text-xs text-slate-300">SKOR</p><p id="score" class="text-2xl font-black text-emerald-300">0</p></div>
+      <div class="glass rounded-2xl p-3 sm:p-4"><p class="text-xs text-slate-300">NYAWA</p><p id="lives" class="text-2xl tracking-widest" aria-label="3 nyawa">❤️❤️❤️</p></div>
+      <div class="glass rounded-2xl p-3 sm:p-4"><p class="text-xs text-slate-300">SOALAN</p><p id="questionCount" class="text-2xl font-black">— / —</p></div>
+      <div class="glass rounded-2xl p-3 sm:p-4"><p class="text-xs text-slate-300">STATUS GERAKAN</p><p id="gestureStatus" class="text-sm sm:text-base font-bold text-amber-200 mt-1">Kamera belum aktif</p></div>
+    </section>
+
+    <section class="grid lg:grid-cols-[1.1fr_.9fr] gap-4">
+      <div class="glass rounded-3xl p-3 sm:p-5">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div><h2 class="font-extrabold text-lg">Ruang Gerakan</h2><p class="text-xs sm:text-sm text-slate-300">Tunjukkan tapak tangan dan gerakkan ke pilihan.</p></div>
+          <span id="cameraPill" class="text-xs rounded-full px-3 py-1 bg-slate-700 text-slate-200">● OFFLINE</span>
+        </div>
+        <div id="cameraWrap" class="rounded-2xl aspect-[4/3] max-h-[430px]">
+          <video id="webcam" autoplay playsinline muted></video>
+          <canvas id="overlay"></canvas>
+          <div id="handCursor" class="hand-cursor"></div>
+          <div id="gestureZones" class="gesture-zones" aria-hidden="true">
+            <div class="gesture-zone" data-zone="0">① PILIHAN A</div>
+            <div class="gesture-zone" data-zone="1">② PILIHAN B</div>
+            <div class="gesture-zone" data-zone="2">③ PILIHAN C</div>
+          </div>
+          <div id="cameraPlaceholder" class="absolute inset-0 grid place-items-center text-center p-6">
+            <div><div class="text-5xl mb-3">🖐️</div><p class="font-bold text-lg">Kamera belum diaktifkan</p><p class="text-sm text-slate-300 mt-1">Tekan “Aktifkan Kamera” dan benarkan akses kamera.</p></div>
+          </div>
+          <div class="absolute left-3 bottom-3 rounded-xl bg-black/40 px-3 py-2 text-xs text-white/90">Cermin aktif • Penjejakan tangan</div>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 mt-3 text-xs text-slate-300">
+          <span>💡 Tahan tangan pada pilihan selama 1 saat.</span>
+          <label class="flex items-center gap-2 cursor-pointer"><input id="gestureToggle" type="checkbox" checked class="accent-emerald-400 w-4 h-4"> Kawalan gerakan</label>
+        </div>
+        <p id="cameraMessage" class="text-xs text-amber-200 mt-2" role="status">Nota: kamera memerlukan HTTPS atau localhost dan sambungan internet untuk memuatkan MediaPipe.</p>
+      </div>
+
+      <div class="glass rounded-3xl p-4 sm:p-6 flex flex-col min-h-[380px]">
+        <div class="flex items-center justify-between gap-2 mb-4">
+          <span class="text-xs font-bold uppercase tracking-[.2em] text-emerald-200">Misi ilmu</span>
+          <span id="difficulty" class="rounded-full bg-white/10 px-3 py-1 text-xs">Kuiz interaktif</span>
+        </div>
+        <div id="startScreen" class="flex-1 flex flex-col items-center justify-center text-center py-6">
+          <div class="text-6xl mb-4">🌙</div>
+          <h2 class="text-2xl sm:text-3xl font-black mb-3">Sedia untuk cabaran?</h2>
+          <p class="text-slate-300 max-w-md mb-6">Jawab soalan tentang solat sunat Aidilfitri dan Aidiladha menggunakan gerakan tangan atau butang pilihan.</p>
+          <button id="startBtn" class="rounded-2xl bg-gradient-to-r from-emerald-300 to-cyan-300 text-slate-950 font-black px-7 py-3.5 shadow-lg hover:brightness-110">Mula Bermain ✨</button>
+          <p class="text-xs text-slate-400 mt-4">Kawalan sentuh / tetikus turut tersedia. Muzik latar boleh dihidupkan atau dimatikan pada bahagian atas.</p>
+        </div>
+        <div id="gameScreen" class="hidden flex-1 flex flex-col">
+          <div class="flex items-center justify-between text-xs text-slate-300 mb-3"><span id="progressText">Soalan 1</span><span id="streakText">Teruskan!</span></div>
+          <div class="h-2 rounded-full bg-white/10 overflow-hidden mb-5"><div id="progressBar" class="h-full rounded-full bg-gradient-to-r from-emerald-300 to-cyan-300 w-0 transition-all"></div></div>
+          <h2 id="questionText" class="text-xl sm:text-2xl font-extrabold leading-snug mb-5">Soalan akan dipaparkan di sini.</h2>
+          <div id="answers" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+          <div class="mt-auto pt-4 flex items-center justify-between gap-3">
+            <p id="feedback" class="text-sm font-semibold text-slate-200" role="status">Pilih jawapan yang betul.</p>
+            <button id="skipBtn" class="text-xs text-slate-300 underline underline-offset-4 hover:text-white">Langkau</button>
+          </div>
+        </div>
+        <div id="endScreen" class="hidden flex-1 flex-col items-center justify-center text-center py-6">
+          <div id="endEmoji" class="text-6xl mb-4">🏆</div><h2 id="endTitle" class="text-3xl font-black mb-2">Tahniah!</h2>
+          <p id="endText" class="text-slate-300 mb-6">Permainan selesai.</p>
+          <button id="replayBtn" class="rounded-2xl bg-gradient-to-r from-emerald-300 to-cyan-300 text-slate-950 font-black px-7 py-3.5">Main Semula ↻</button>
+        </div>
+      </div>
+    </section>
+    <footer class="text-center text-xs text-slate-400 py-5">Dibina untuk pembelajaran • Solat Sunat Hari Raya Aidilfitri & Aidiladha</footer>
+  </main>
+
+  <div id="bankModal" class="hidden fixed inset-0 z-50 modal-backdrop p-3 sm:p-6 overflow-y-auto">
+    <div class="glass rounded-3xl max-w-5xl mx-auto my-4 p-4 sm:p-6 bg-slate-900/90">
+      <div class="flex items-center justify-between gap-3 mb-5"><div><h2 class="text-2xl font-black">📚 Bank Soalan</h2><p class="text-sm text-slate-300">Tambah, sunting atau padam soalan kuiz.</p></div><button id="closeBank" class="rounded-xl bg-white/10 hover:bg-white/20 px-3 py-2" aria-label="Tutup">✕</button></div>
+      <div class="grid lg:grid-cols-[.9fr_1.1fr] gap-5">
+        <form id="questionForm" class="rounded-2xl bg-white/5 border border-white/10 p-4 space-y-3">
+          <input type="hidden" id="editId">
+          <label class="block text-sm font-bold">Soalan<textarea id="qText" required rows="3" class="mt-1 w-full rounded-xl bg-slate-950/70 border border-white/15 p-3 text-sm" placeholder="Tulis soalan di sini..."></textarea></label>
+          <label class="block text-sm font-bold">Pilihan A<input id="opt0" required class="mt-1 w-full rounded-xl bg-slate-950/70 border border-white/15 p-3 text-sm"></label>
+          <label class="block text-sm font-bold">Pilihan B<input id="opt1" required class="mt-1 w-full rounded-xl bg-slate-950/70 border border-white/15 p-3 text-sm"></label>
+          <label class="block text-sm font-bold">Pilihan C<input id="opt2" required class="mt-1 w-full rounded-xl bg-slate-950/70 border border-white/15 p-3 text-sm"></label>
+          <label class="block text-sm font-bold">Jawapan betul<select id="correctOpt" class="mt-1 w-full rounded-xl bg-slate-950 border border-white/15 p-3 text-sm"><option value="0">A</option><option value="1">B</option><option value="2">C</option></select></label>
+          <div class="flex gap-2"><button id="saveQuestion" class="flex-1 rounded-xl bg-emerald-400 text-slate-950 font-black p-3">Simpan soalan</button><button type="button" id="cancelEdit" class="rounded-xl bg-white/10 px-4">Kosongkan</button></div>
+          <p id="formMessage" class="text-xs text-emerald-200" role="status"></p>
+        </form>
+        <div><div class="flex items-center justify-between mb-3"><h3 class="font-bold">Senarai soalan (<span id="bankCount">0</span>)</h3><button id="resetBank" class="text-xs underline text-amber-200">Pulihkan set asal</button></div><div id="bankList" class="space-y-2 max-h-[60vh] overflow-y-auto pr-1"></div></div>
+      </div>
+      <p class="text-xs text-slate-400 mt-5">Perubahan bank soalan disimpan dalam sesi semasa. Muat semula halaman akan memulihkan set asal.</p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script>
+  (() => {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const originalQuestions = [
+      {id:1,q:'Apakah hukum solat sunat Hari Raya Aidilfitri dan Aidiladha?',a:['Fardu ain','Sunat muakkad','Harus sahaja'],correct:1},
+      {id:2,q:'Bilakah solat sunat Aidilfitri dilaksanakan?',a:['1 Syawal','10 Zulhijjah','12 Rabiulawal'],correct:0},
+      {id:3,q:'Bilakah Hari Raya Aidiladha disambut?',a:['1 Muharam','10 Zulhijjah','15 Syaaban'],correct:1},
+      {id:4,q:'Berapakah bilangan rakaat solat sunat Hari Raya?',a:['Dua rakaat','Tiga rakaat','Empat rakaat'],correct:0},
+      {id:5,q:'Dalam amalan mazhab Syafi‘i, berapakah takbir tambahan pada rakaat pertama selepas takbiratul ihram dan doa iftitah?',a:['Lima takbir','Tujuh takbir','Sembilan takbir'],correct:1},
+      {id:6,q:'Dalam amalan mazhab Syafi‘i, berapakah takbir tambahan pada rakaat kedua selepas bangun daripada sujud?',a:['Lima takbir','Tujuh takbir','Tiga takbir'],correct:0},
+      {id:7,q:'Apakah amalan sunat sebelum menunaikan solat Aidilfitri?',a:['Makan terlebih dahulu','Tidak makan langsung sepanjang hari','Tidur selepas Subuh'],correct:0},
+      {id:8,q:'Apakah amalan sunat berkaitan makan pada pagi Hari Raya Aidiladha?',a:['Makan sebelum solat Hari Raya','Tidak makan sehingga selesai solat Hari Raya','Meninggalkan makan sepanjang hari'],correct:1},
+      {id:9,q:'Bilakah waktu solat sunat Hari Raya bermula?',a:['Selepas terbit matahari hingga sebelum gelincir matahari','Selepas Isyak sahaja','Sebelum masuk Subuh'],correct:0},
+      {id:10,q:'Apakah yang disunatkan ketika pergi ke tempat solat Hari Raya?',a:['Bertakbir dan memakai pakaian yang baik','Bercakap kuat hingga mengganggu orang','Meninggalkan kebersihan diri'],correct:0},
+      {id:11,q:'Apakah yang dilakukan selepas solat sunat Hari Raya dalam kebiasaan amalan?',a:['Khutbah Hari Raya','Solat tarawih','Khutbah Jumaat'],correct:0},
+      {id:12,q:'Apakah tujuan utama umat Islam menyambut Hari Raya?',a:['Berlumba-lumba menunjuk kekayaan','Mensyukuri nikmat Allah dan mengeratkan silaturahim','Mengabaikan tanggungjawab'],correct:1}
+    ];
+    let questions = originalQuestions.map(q => ({...q,a:[...q.a]}));
+    let score = 0, lives = 3, index = 0, playing = false, answered = false, nextId = 100;
+    let camera = null, hands = null, cameraOn = false, lastHand = null, hoverIndex = -1, hoverSince = 0, busy = false, audioCtx = null;
+    let musicGain = null, musicTimer = null, musicEnabled = true, musicVolume = 0.35, musicLoopRunning = false;
+
+    const setText = (id, text) => { $(id).textContent = text; };
+    function updateHUD() {
+      setText('score', score); setText('lives', '❤️'.repeat(lives) + '🖤'.repeat(3-lives));
+      $('lives').setAttribute('aria-label', lives + ' nyawa');
+      setText('questionCount', playing ? `${Math.min(index+1, questions.length)} / ${questions.length}` : '— / ' + questions.length);
+    }
+    // Muzik latar instrumental asli bernuansa perayaan: melodi ceria tanpa lagu berhak cipta.
+    function ensureAudioContext() {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      audioCtx ||= new Ctx();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+    function playMusicNote(freq, startAt, duration, volume, wave='sine') {
+      if (!audioCtx || !musicGain || !musicEnabled) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = wave;
+      osc.frequency.setValueAtTime(freq, startAt);
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), startAt + 0.035);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+      osc.connect(gain);
+      gain.connect(musicGain);
+      osc.start(startAt);
+      osc.stop(startAt + duration + 0.04);
+    }
+    function scheduleMusicPhrase() {
+      if (!musicEnabled || !audioCtx || !musicGain) return;
+      const melody = [659.25, 783.99, 880, 783.99, 659.25, 587.33, 523.25, 587.33,
+                      659.25, 783.99, 987.77, 880, 783.99, 659.25, 587.33, 523.25];
+      const bass = [164.81, 196.00, 174.61, 146.83];
+      const now = audioCtx.currentTime + 0.08;
+      const beat = 0.34;
+      melody.forEach((freq, i) => {
+        playMusicNote(freq, now + i * beat, 0.27, 0.075, 'triangle');
+        if (i % 2 === 0) playMusicNote(freq * 2, now + i * beat, 0.16, 0.018, 'sine');
+      });
+      bass.forEach((freq, i) => playMusicNote(freq, now + i * beat * 4, 1.05, 0.035, 'sine'));
+      musicTimer = setTimeout(scheduleMusicPhrase, melody.length * beat * 1000);
+    }
+    function startMusic() {
+      if (!musicEnabled || musicLoopRunning) return;
+      const ctx = ensureAudioContext();
+      if (!ctx) {
+        setText('cameraMessage', 'Pelayar ini tidak menyokong muzik latar. Cuba Chrome atau Edge terkini.');
+        return;
+      }
+      musicGain ||= ctx.createGain();
+      if (!musicGain.__connected) {
+        musicGain.gain.value = 0;
+        musicGain.connect(ctx.destination);
+        musicGain.__connected = true;
+      }
+      musicGain.gain.cancelScheduledValues(ctx.currentTime);
+      musicGain.gain.setTargetAtTime(musicVolume, ctx.currentTime, 0.25);
+      musicLoopRunning = true;
+      scheduleMusicPhrase();
+    }
+    function stopMusic() {
+      musicLoopRunning = false;
+      if (musicTimer) clearTimeout(musicTimer);
+      musicTimer = null;
+      if (musicGain && audioCtx) {
+        musicGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        musicGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.12);
+      }
+    }
+    function setMusicVolume(value) {
+      musicVolume = Math.max(0, Math.min(1, Number(value) / 100));
+      if (musicGain && audioCtx && musicEnabled) {
+        musicGain.gain.setTargetAtTime(musicVolume, audioCtx.currentTime, 0.08);
+      }
+    }
+    $('musicBtn').addEventListener('click', () => {
+      musicEnabled = !musicEnabled;
+      $('musicBtn').textContent = musicEnabled ? '🎵 Muzik: ON' : '🔇 Muzik: OFF';
+      $('musicBtn').setAttribute('aria-pressed', String(musicEnabled));
+      $('musicBtn').classList.toggle('bg-emerald-400', musicEnabled);
+      $('musicBtn').classList.toggle('text-slate-950', musicEnabled);
+      if (musicEnabled) startMusic(); else stopMusic();
+    });
+    $('musicVolume').addEventListener('input', e => setMusicVolume(e.target.value));
+
+    function audio(type) {
+      try {
+        if (!ensureAudioContext()) return;
+        const now = audioCtx.currentTime;
+        const notes = type === 'wrong' ? [{f:220,d:.18,t:0},{f:165,d:.22,t:.16}] :
+          type === 'win' ? [{f:523.25,d:.16,t:0},{f:659.25,d:.16,t:.13},{f:783.99,d:.2,t:.26},{f:1046.5,d:.34,t:.42}] :
+          [{f:659.25,d:.12,t:0},{f:880,d:.22,t:.12},{f:1174.66,d:.28,t:.24}];
+        notes.forEach(n => {
+          const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+          osc.type = type === 'wrong' ? 'triangle' : 'sine';
+          osc.frequency.setValueAtTime(n.f, now+n.t);
+          gain.gain.setValueAtTime(.0001, now+n.t);
+          gain.gain.exponentialRampToValueAtTime(.13, now+n.t+.02);
+          gain.gain.exponentialRampToValueAtTime(.0001, now+n.t+n.d);
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          osc.start(now+n.t); osc.stop(now+n.t+n.d+.02);
+        });
+      } catch(e) { console.warn('Audio tidak tersedia:', e); }
+    }
+    function confetti() {
+      const colors = ['#34d399','#67e8f9','#fde047','#f9a8d4','#c4b5fd','#fb923c'];
+      for (let i=0;i<48;i++) {
+        const el = document.createElement('i'); el.className='confetti';
+        el.style.left = Math.random()*100+'vw'; el.style.background=colors[i%colors.length];
+        el.style.setProperty('--drift',(Math.random()*220-110)+'px');
+        el.style.animationDelay=(Math.random()*.35)+'s'; el.style.transform=`rotate(${Math.random()*180}deg)`;
+        document.body.appendChild(el); setTimeout(()=>el.remove(),2400);
+      }
+    }
+    function showScreen(which) {
+      ['startScreen','gameScreen','endScreen'].forEach(id => $(id).classList.add('hidden'));
+      $(which).classList.remove('hidden');
+      if (which === 'endScreen') $(which).classList.add('flex'); else $(which).classList.remove('flex');
+    }
+    function startGame() {
+      if (!questions.length) { alert('Bank soalan kosong. Tambah sekurang-kurangnya satu soalan.'); return; }
+      score=0; lives=3; index=0; playing=true; answered=false;
+      setText('difficulty','Kuiz interaktif'); setText('streakText','Semoga berjaya!');
+      updateHUD(); showScreen('gameScreen'); renderQuestion();
+      startMusic();
+      audio('success');
+    }
+    function renderQuestion() {
+      if (!playing) return;
+      if (index >= questions.length) { finishGame(true); return; }
+      answered=false; hoverIndex=-1; hoverSince=0; setText('feedback','Pilih jawapan yang betul.');
+      setText('questionText', questions[index].q);
+      setText('progressText',`Soalan ${index+1} daripada ${questions.length}`);
+      $('progressBar').style.width=(index/questions.length*100)+'%';
+      $('answers').innerHTML='';
+      questions[index].a.forEach((answer,i) => {
+        const btn=document.createElement('button');
+        btn.type='button'; btn.className='answer glass rounded-2xl p-4 text-left flex sm:flex-col items-center sm:items-start justify-start gap-3';
+        btn.dataset.answer=String(i);
+        const letter=document.createElement('span'); letter.className='choice-letter shrink-0'; letter.textContent=['A','B','C'][i];
+        const txt=document.createElement('span'); txt.className='font-bold text-sm sm:text-base leading-snug'; txt.textContent=answer;
+        const ringWrap=document.createElement('span'); ringWrap.className='ml-auto sm:ml-0 sm:self-end relative w-9 h-9 shrink-0';
+        ringWrap.innerHTML='<svg viewBox="0 0 40 40" class="w-full h-full"><circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="4"/><circle class="ring" data-ring="'+i+'" cx="20" cy="20" r="16" fill="none" stroke="#fde047" stroke-width="4" stroke-linecap="round"/></svg>';
+        btn.append(letter,txt,ringWrap); btn.addEventListener('click',()=>chooseAnswer(i)); $('answers').appendChild(btn);
+      });
+      updateHUD();
+    }
+    function chooseAnswer(i) {
+      if (!playing || answered || busy || i<0 || i>2) return;
+      answered=true; busy=true; hoverIndex=-1;
+      const q=questions[index], buttons=[...$('answers').querySelectorAll('button')];
+      buttons.forEach((b,j)=>{ b.disabled=true; if(j===q.correct)b.classList.add('correct'); if(j===i&&i!==q.correct)b.classList.add('wrong'); });
+      if(i===q.correct) {
+        score+=10; setText('feedback','Betul! Syabas! +10 mata ✨'); setText('streakText','Hebat! Teruskan 🌟'); audio('success'); confetti();
+      } else {
+        lives--; setText('feedback',`Belum tepat. Jawapan: ${q.a[q.correct]}`); setText('streakText','Cuba lagi!'); audio('wrong');
+        $('app').classList.remove('shake'); void $('app').offsetWidth; $('app').classList.add('shake');
+      }
+      updateHUD();
+      setTimeout(()=>{
+        busy=false;
+        if(lives<=0) finishGame(false);
+        else { index++; if(index>=questions.length) finishGame(true); else renderQuestion(); }
+      }, 1450);
+    }
+    function finishGame(victory) {
+      playing=false; answered=true; showScreen('endScreen'); updateHUD();
+      setText('endEmoji',victory?'🏆':'💪'); setText('endTitle',victory?'Tahniah, Misi Selesai!':'Permainan Tamat');
+      setText('endText',victory?`Skor akhir anda ${score} mata. Teruskan mengulang kaji ilmu Hari Raya!`:`Skor anda ${score} mata. Cuba lagi untuk menguasai semua soalan.`);
+      $('progressBar').style.width=(victory?100:Math.min(index/questions.length*100,100))+'%';
+      if(victory){audio('win');confetti();}
+    }
+    $('startBtn').addEventListener('click',startGame);
+    $('replayBtn').addEventListener('click',startGame);
+    $('skipBtn').addEventListener('click',()=>{if(playing&&!answered){answered=true; index++; if(index>=questions.length)finishGame(true);else renderQuestion();}});
+    $('bankBtn').addEventListener('click',()=>{renderBank();$('bankModal').classList.remove('hidden');});
+    $('closeBank').addEventListener('click',()=>$('bankModal').classList.add('hidden'));
+    $('bankModal').addEventListener('click',e=>{if(e.target===$('bankModal'))$('bankModal').classList.add('hidden');});
+    function clearForm(){ $('questionForm').reset(); $('editId').value=''; setText('formMessage',''); $('saveQuestion').textContent='Simpan soalan'; }
+    $('cancelEdit').addEventListener('click',clearForm);
+    $('questionForm').addEventListener('submit',e=>{
+      e.preventDefault();
+      const q=$('qText').value.trim(), a=[$('opt0').value.trim(),$('opt1').value.trim(),$('opt2').value.trim()], correct=Number($('correctOpt').value), id=$('editId').value;
+      if(!q||a.some(x=>!x)){setText('formMessage','Lengkapkan semua ruangan.');return;}
+      if(id){const pos=questions.findIndex(x=>x.id===Number(id));if(pos>=0)questions[pos]={id:Number(id),q,a,correct};}
+      else questions.push({id:nextId++,q,a,correct});
+      clearForm(); setText('formMessage','Soalan berjaya disimpan.'); renderBank(); updateHUD();
+      if(playing){playing=false;showScreen('startScreen');setText('feedback','Bank soalan berubah. Mulakan semula untuk bermain.');}
+    });
+    function renderBank(){
+      setText('bankCount',questions.length); $('bankList').innerHTML='';
+      if(!questions.length){$('bankList').innerHTML='<p class="text-sm text-slate-400 p-3">Belum ada soalan. Tambah soalan menggunakan borang.</p>';return;}
+      questions.forEach((q,i)=>{
+        const row=document.createElement('div');row.className='rounded-xl border border-white/10 bg-white/5 p-3';
+        const title=document.createElement('p');title.className='font-bold text-sm';title.textContent=`${i+1}. ${q.q}`;
+        const answer=document.createElement('p');answer.className='text-xs text-emerald-200 mt-1';answer.textContent=`Jawapan betul: ${['A','B','C'][q.correct]} — ${q.a[q.correct]}`;
+        const actions=document.createElement('div');actions.className='flex gap-2 mt-3';
+        const edit=document.createElement('button');edit.type='button';edit.className='text-xs rounded-lg bg-cyan-500/20 px-3 py-1.5';edit.textContent='Sunting';
+        edit.addEventListener('click',()=>{$('editId').value=q.id;$('qText').value=q.q;$('opt0').value=q.a[0];$('opt1').value=q.a[1];$('opt2').value=q.a[2];$('correctOpt').value=String(q.correct);$('saveQuestion').textContent='Simpan perubahan';$('questionForm').scrollIntoView({behavior:'smooth',block:'start'});});
+        const del=document.createElement('button');del.type='button';del.className='text-xs rounded-lg bg-rose-500/20 text-rose-200 px-3 py-1.5';del.textContent='Padam';
+        del.addEventListener('click',()=>{if(confirm('Padam soalan ini?')){questions=questions.filter(x=>x.id!==q.id);renderBank();updateHUD();}});
+        actions.append(edit,del);row.append(title,answer,actions);$('bankList').appendChild(row);
+      });
+    }
+    $('resetBank').addEventListener('click',()=>{if(confirm('Pulihkan semua soalan asal?')){questions=originalQuestions.map(q=>({...q,a:[...q.a]}));clearForm();renderBank();updateHUD();}});
+    // Webcam / MediaPipe Hands
+    const video=$('webcam'), canvas=$('overlay'), ctx=canvas.getContext('2d');
+    function resizeCanvas(){const r=$('cameraWrap').getBoundingClientRect();canvas.width=Math.max(1,Math.round(r.width*devicePixelRatio));canvas.height=Math.max(1,Math.round(r.height*devicePixelRatio));ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);}
+    window.addEventListener('resize',resizeCanvas); resizeCanvas();
+    function updateCursor(point) {
+      const wrap=$('cameraWrap').getBoundingClientRect();
+      const cursor=$('handCursor'); cursor.style.display='block';
+      cursor.style.left=(point.x*wrap.width)+'px'; cursor.style.top=(point.y*wrap.height)+'px';
+    }
+    function resetGesture(){hoverIndex=-1;hoverSince=0;document.querySelectorAll('[data-ring]').forEach(r=>r.style.strokeDashoffset='100');document.querySelectorAll('.answer.selected').forEach(b=>b.classList.remove('selected'));document.querySelectorAll('.gesture-zone').forEach(z=>z.classList.remove('active'));}
+    function onResults(results) {
+      const w=$('cameraWrap').clientWidth,h=$('cameraWrap').clientHeight;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      if(results.image && video.readyState>=2) {
+        // Canvas menggunakan koordinat CSS; resizeCanvas() sudah menetapkan skala DPR.
+        // CSS mirror pada overlay menyelaraskan lakaran dengan paparan video.
+        if(results.multiHandLandmarks && results.multiHandLandmarks.length) {
+          const lm=results.multiHandLandmarks[0];
+          if(window.drawConnectors && window.HAND_CONNECTIONS){
+            ctx.save();
+            window.drawConnectors(ctx,lm,window.HAND_CONNECTIONS,{color:'#6ee7b7',lineWidth:3});
+            window.drawLandmarks(ctx,lm,{color:'#fde047',lineWidth:1,radius:3});
+            ctx.restore();
+          }
+          const p={x:lm[8].x,y:lm[8].y}; lastHand=p;
+          // Video and canvas are mirrored by CSS, so flip normalized x for UI hit-testing.
+          const uiPoint={x:1-p.x,y:p.y}; updateCursor(uiPoint);
+          setText('gestureStatus','Tangan dikesan ✓'); $('gestureStatus').className='text-sm sm:text-base font-bold text-emerald-200 mt-1';
+          if(playing && $('gestureToggle').checked && !answered && !busy) {
+            // The camera panel has three visible gesture zones because answer cards sit beside the video.
+            // Horizontal hand position maps to A/B/C; keep the hand in the lower zone to avoid accidental picks.
+            let found=-1;
+            if(uiPoint.y > 0.30 && uiPoint.y < 0.91) found=Math.min(2,Math.floor(uiPoint.x*3));
+            if(found!==hoverIndex){resetGesture();hoverIndex=found;hoverSince=performance.now();}
+            document.querySelectorAll('.gesture-zone').forEach((z,j)=>z.classList.toggle('active',j===found));
+            if(found>=0){
+              const elapsed=performance.now()-hoverSince, pct=Math.min(elapsed/1000,1);
+              const ring=$(`[data-ring="${found}"]`); if(ring)ring.style.strokeDashoffset=String(100-pct*100);
+              const btn=$('answers').querySelectorAll('button')[found]; if(btn)btn.classList.add('selected');
+              if(elapsed>=1000)chooseAnswer(found);
+            } else resetGesture();
+          } else resetGesture();
+        } else {
+          lastHand=null; $('handCursor').style.display='none'; setText('gestureStatus','Tangan tidak dikesan'); $('gestureStatus').className='text-sm sm:text-base font-bold text-amber-200 mt-1'; resetGesture();
+        }
+      }
+    }
+    async function startCamera() {
+      if(cameraOn){stopCamera();return;}
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){setText('cameraMessage','Pelayar ini tidak menyokong akses kamera. Cuba Chrome atau Edge terkini melalui HTTPS/localhost.');return;}
+      $('cameraBtn').disabled=true;setText('cameraBtn','Memuatkan…');
+      try {
+        if(!window.Hands) throw new Error('Pustaka MediaPipe Hands gagal dimuatkan. Periksa sambungan internet.');
+        hands=new Hands({locateFile:file=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:.6,minTrackingConfidence:.55});
+        hands.onResults(onResults);
+        camera=new Camera(video,{onFrame:async()=>{if(hands&&cameraOn)await hands.send({image:video});},width:640,height:480});
+        cameraOn=true; await camera.start();
+        $('cameraPlaceholder').classList.add('hidden');$('cameraPill').textContent='● AKTIF';$('cameraPill').className='text-xs rounded-full px-3 py-1 bg-emerald-400/20 text-emerald-200';
+        $('cameraBtn').textContent='⏹ Tutup Kamera';setText('cameraMessage','Kamera aktif. Halakan jari telunjuk ke pilihan jawapan dan tahan selama 1 saat.');
+        setText('gestureStatus','Mencari tangan…'); $('gestureStatus').className='text-sm sm:text-base font-bold text-amber-200 mt-1';
+      } catch(err) {
+        cameraOn=false; if(camera&&camera.stop)camera.stop();camera=null;
+        setText('cameraMessage','Tidak dapat mengaktifkan kamera: '+(err.message||err)+' Pastikan kebenaran kamera dibenarkan dan halaman dibuka melalui HTTPS atau localhost.');
+        $('cameraPill').textContent='● RALAT';$('cameraPill').className='text-xs rounded-full px-3 py-1 bg-rose-500/20 text-rose-200';
+      } finally { $('cameraBtn').disabled=false; if(!cameraOn)$('cameraBtn').textContent='📷 Aktifkan Kamera'; }
+    }
+    function stopCamera() {
+      cameraOn=false;
+      if(camera&&camera.stop)camera.stop(); camera=null;
+      if(hands){try{hands.close();}catch(e){} hands=null;}
+      if(video.srcObject){video.srcObject.getTracks().forEach(t=>t.stop());video.srcObject=null;}
+      $('cameraPlaceholder').classList.remove('hidden');$('handCursor').style.display='none';
+      $('cameraPill').textContent='● OFFLINE';$('cameraPill').className='text-xs rounded-full px-3 py-1 bg-slate-700 text-slate-200';
+      $('cameraBtn').textContent='📷 Aktifkan Kamera';setText('gestureStatus','Kamera belum aktif');setText('cameraMessage','Kamera dihentikan. Aktifkan semula untuk menggunakan kawalan gerakan.');resetGesture();
+    }
+    $('cameraBtn').addEventListener('click',startCamera);
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')$('bankModal').classList.add('hidden');if(playing&&!answered&&['1','2','3'].includes(e.key))chooseAnswer(Number(e.key)-1);});
+    window.addEventListener('beforeunload',()=>{if(cameraOn)stopCamera();});
+    updateHUD(); renderBank();
+  })();
+  </script>
+</body>
+</html>
